@@ -56,7 +56,43 @@ void UpdateVertexGrid(float x, float y)
 		vk.vertex_grid[y2][x2] |= FLAG_STONE;
 	} 
 
-	memcpy(vk.vertex_grid_mapped, &vk.vertex_grid[0][0], sizeof(vk.vertex_grid));
+	memcpy(vk.vertex_grid_mapped, &vk.vertex_grid[0], sizeof(vk.vertex_grid));
+}
+
+void SetGridDirt()
+{
+	for (uint32_t w = 0; w < 101; w++)
+	{
+		for (uint32_t h = 0; h < 101; h++)
+		{
+			vk.vertex_grid[w][h] |= FLAG_STONE;
+		}
+	}
+
+	int radius = 3; 
+	int length = 97;
+
+	for (int i = 0; i < length; ++i) 
+	{
+		int cx = i;
+		int cz = i;
+
+		for (int dz = -radius; dz <= radius; ++dz) 
+		{
+			for (int dx = -radius; dx <= radius; ++dx) 
+			{
+				int x = cx + dx;
+				int z = 101 - (cz + dz);
+
+				if (x >= 0 && x < 101 && z >= 0 && z < 101) 
+				{
+					vk.vertex_grid[z][x] &= ~FLAG_STONE;
+				}
+			}
+		}
+	}
+
+	memcpy(vk.vertex_grid_mapped, &vk.vertex_grid[0], sizeof(vk.vertex_grid));
 }
 void UpdateFogGrid()
 {
@@ -96,14 +132,14 @@ void HpToScreen(v3 pos, mat4 viewproj, float char_height)
 	v2 pos_2d = WorldToScreen(pos, viewproj);
 
 	float bar_w = 100.0f;
-	float bar_h = 14.0f;
+	float bar_h = 18.0f;
 
 	float bar_x = pos_2d.x - (bar_w / 2.0f);
 	float bar_y = pos_2d.y - (bar_h / 2.0f);
 
-	CreateQuad(bar_x, bar_y + 20.0f, bar_w, bar_h, 5);
-	CreateQuad(bar_x, bar_y + 20.0f, bar_w, bar_h, 3); //health bar
-	CreateQuad(bar_x, bar_y + 20.0f, bar_w, bar_h, 4); //mana bar
+	CreateQuad(bar_x, bar_y + 20.0f, bar_w, bar_h, 4);
+	CreateQuad(bar_x, bar_y + 20.0f, bar_w, bar_h, 5); //health bar
+	CreateQuad(bar_x, bar_y + 20.0f, bar_w, bar_h, 6); //mana bar
 }
 void PrintGrid() {
 	for (int y = 0; y < GRID_SIZE; ++y) {
@@ -198,6 +234,18 @@ RayCollision GetRayCollisionBox(Ray ray, BoundingBox box)
 
 	return collision;
 }
+mat4 TSA(v3 translate, float scale, float angle)
+{
+	mat4 result = mat4_diagonal(1.0f);
+
+	mat4 scale_mat = mat4_scale({ scale, scale, scale });
+	mat4 rotate_mat = mat4_rotate_RH(angle, { 0.0f, 0.0f, 1.0f });
+	mat4 translate_mat = mat4_translate({ translate.x, translate.y, 0.0f });
+
+	result = mat4_multiply(translate_mat, mat4_multiply(rotate_mat, scale_mat));
+
+	return result;
+}
 
 void InitGame()
 {
@@ -265,12 +313,15 @@ void UploadData()
 	gubo.dest = { p1.destination.x, p1.destination.y, 0,0 };
 	memcpy(vk.global_uniform_buffer_mapped[current_frame], &gubo, sizeof(gubo));
 
-	gc.model[0]	= mat4_multiply(mat4_translate({ 50.0f, 50.0f, 0.0f }), mat4_scale({ 1.0f, 1.0f, 1.0f }));
-	gc.model[1] = mat4_multiply(mat4_rotate_RH(p1.angle, { 0.0f, 0.0f, 1.0f }), mat4_scale({ 0.5f, 0.5f, 0.5f }));
-	gc.model[1] = mat4_multiply(mat4_translate({ p1.position.x, p1.position.y, 0.0f }), gc.model[1]);
-	gc.model[2] = mat4_multiply(mat4_translate({ 55.0f, 50.0f, 0.0f }), mat4_scale({ 1.0f, 1.0f, 1.0f }));
-	gc.model[3] = mat4_multiply(mat4_translate({ 10.0f, 10.0f, 0.2f }), mat4_scale({ 1.0f, 1.0f, 1.0f }));
-	memcpy(vk.model_uniform_buffer_mapped[current_frame], gc.model, sizeof(mat4) * MODEL_NUM);
+	vk.instance_data[0].model_mat = TSA({ 50.0,50.0,0.0 },	1.0, 0.0);
+	vk.instance_data[0].tex_id = 0;
+	vk.instance_data[1].model_mat = TSA(p1.position, 0.5, p1.angle);
+	vk.instance_data[1].tex_id = 1;
+	vk.instance_data[2].model_mat = TSA({ 10.0,10.0,0.0 }, 0.4, 0.0);
+	vk.instance_data[2].tex_id = 2;
+
+	VkDeviceSize upload = sizeof(InstanceData) * 3;
+	memcpy(vk.instance_buffer_mapped[current_frame], vk.instance_data, upload);
 
 	vk.global_vert_2d.clear();
 	HpToScreen(p1.position, gubo.projView, 1.556);
@@ -283,12 +334,13 @@ void UpdateGame(float frame_delta)
 	ImGui_ImplVulkan_NewFrame();
 	ImGui_ImplWin32_NewFrame();
 	ImGui::NewFrame();
-	if (debuginf.show_imgui)
+	if (debuginfo.show_imgui)
 	{
 		gubo.is_debug = 1;
 		ImGui::Begin("DEBUG");
-		ImGui::Text("ms/f %.2f\n", ((debuginf.real_counter_elapsed * 1000.0f) / debuginf.perf_count_frequency));
-		ImGui::Text("fps %.2f \n", debuginf.perf_count_frequency / debuginf.real_counter_elapsed);
+		ImGui::Text("time %.2f\n", gubo.time);
+		ImGui::Text("ms/f %.2f\n", ((debuginfo.real_counter_elapsed * 1000.0f) / debuginfo.perf_count_frequency));
+		ImGui::Text("fps  %.2f \n", debuginfo.perf_count_frequency / debuginfo.real_counter_elapsed);
 		ImGui::End();
 	}
 	else(gubo.is_debug = 0);
@@ -307,5 +359,4 @@ void UpdateGame(float frame_delta)
 	UpdateFogGrid();
 	UploadData();
 	DrawFrame();
-	gubo.frame_num++;
 }

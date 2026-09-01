@@ -7,7 +7,7 @@
 #endif
 
 WinContext win = {};
-DebugInfo debuginf = {};
+DebugInfo debuginfo = {};
 float render_dt = 1.0f / 60.0f;
 
 int CALLBACK WinMain
@@ -18,14 +18,14 @@ int CALLBACK WinMain
 {
 	LARGE_INTEGER perf_count_frequency_result;
 	QueryPerformanceFrequency(&perf_count_frequency_result);
-	debuginf.perf_count_frequency = perf_count_frequency_result.QuadPart;
+	debuginfo.perf_count_frequency = perf_count_frequency_result.QuadPart;
 
 	InitConsole();
 
 	#ifdef DEBUG
 	ImGui::CreateContext();
 	#endif
-
+	
 	WNDCLASSEXW win32_class = {};
 	win32_class.lpfnWndProc = Win32Callback;
 	win32_class.hInstance = instance;
@@ -45,7 +45,9 @@ int CALLBACK WinMain
 		if (window_handle)
 		{
 			InitVulkan(window_handle);
+			#ifdef DEBUG
 			InitImgui(window_handle);
+			#endif
 			InitGame();
 			win.running = true;
 
@@ -64,7 +66,7 @@ int CALLBACK WinMain
 				QueryPerformanceCounter(&end_counter);
 
 				float counter_elapsed = end_counter.QuadPart - last_counter.QuadPart;
-				float sec_per_frame = counter_elapsed / debuginf.perf_count_frequency;
+				float sec_per_frame = counter_elapsed / debuginfo.perf_count_frequency;
 				
 				if (sec_per_frame < render_dt)
 				{
@@ -77,23 +79,22 @@ int CALLBACK WinMain
 						}
 						QueryPerformanceCounter(&end_counter);
 						sec_per_frame = (end_counter.QuadPart - last_counter.QuadPart)
-							/ debuginf.perf_count_frequency;
+							/ debuginfo.perf_count_frequency;
 					}
 					while (sec_per_frame < render_dt)
 					{
 						QueryPerformanceCounter(&end_counter);
 						sec_per_frame = (end_counter.QuadPart - last_counter.QuadPart)
-							/ debuginf.perf_count_frequency;
+							/ debuginfo.perf_count_frequency;
 					}
 				}
-				else{}
-
 				LARGE_INTEGER real_counter;
 				QueryPerformanceCounter(&real_counter);
-				debuginf.real_counter_elapsed = real_counter.QuadPart - last_counter.QuadPart;
-				debuginf.real_sec_per_frame = debuginf.real_counter_elapsed / debuginf.perf_count_frequency;
+				debuginfo.real_counter_elapsed = real_counter.QuadPart - last_counter.QuadPart;
+				debuginfo.real_sec_per_frame = debuginfo.real_counter_elapsed / debuginfo.perf_count_frequency;
 
-				frame_delta = debuginf.real_sec_per_frame;
+				frame_delta = debuginfo.real_sec_per_frame;
+				gubo.time += debuginfo.real_sec_per_frame;
 				last_counter = real_counter;
 			}
 		}

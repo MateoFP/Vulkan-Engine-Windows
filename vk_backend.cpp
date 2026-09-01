@@ -114,6 +114,9 @@ void Create3DPipeline(VkDescriptorSetLayout* set_layouts)
 
 	VK_CHECK(vkCreateShaderModule(vk.logical_device, &vertShaderCreateInfo, nullptr, &vert_module));
 	VK_CHECK(vkCreateShaderModule(vk.logical_device, &fragShaderCreateInfo, nullptr, &frag_module));
+	
+	free(vert_shader_code.contents);
+	free(frag_shader_code.contents);
 
 	VkPipelineShaderStageCreateInfo vert_stage{};
 	vert_stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -154,7 +157,7 @@ void Create3DPipeline(VkDescriptorSetLayout* set_layouts)
 	VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
 	vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 	vertexInputInfo.vertexBindingDescriptionCount = 1;
-	vertexInputInfo.vertexAttributeDescriptionCount = 4;
+	vertexInputInfo.vertexAttributeDescriptionCount = 2;
 	vertexInputInfo.pVertexBindingDescriptions = &binding_description;
 	vertexInputInfo.pVertexAttributeDescriptions = attribute_descriptions;
 
@@ -187,7 +190,7 @@ void Create3DPipeline(VkDescriptorSetLayout* set_layouts)
 
 	VkPipelineColorBlendAttachmentState colorBlendAttachment{};
 	colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-	colorBlendAttachment.blendEnable		 = VK_FALSE;
+	colorBlendAttachment.blendEnable		 = VK_TRUE;
 	colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
 	colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
 	colorBlendAttachment.colorBlendOp		 = VK_BLEND_OP_ADD;
@@ -534,7 +537,8 @@ void SetImageLayout(VkCommandBuffer cmd_buffer, VkImage images, VkImageLayout ol
 
 	vkCmdPipelineBarrier(cmd_buffer, sourceStage, destinationStage, 0, 0, nullptr, 0, nullptr, 1, &barrier);
 }
-void LoadModel(const char* path, uint32_t model_id, uint32_t tex_id)
+
+ModelMeshes load_gltf(const char* path)
 {
 	cgltf_options options = {};
 	cgltf_data* data = nullptr;
@@ -544,20 +548,19 @@ void LoadModel(const char* path, uint32_t model_id, uint32_t tex_id)
 	{
 		OutputDebugStringA("failed at parsing model file.\n");
 	}
-
 	result = cgltf_load_buffers(&options, data, path);
 	if (result != cgltf_result_success)
 	{
 		OutputDebugStringA("failed at loading model buffers.\n");
 	}
 
-	//vertex 
-	for (size_t m = 0; m < data->meshes_count; ++m)
+	ModelMeshes model = {};
+	model.submesh_index = static_cast<uint32_t>(vk.meshes_alloc.size());
+	for (cgltf_size m = 0; m < data->meshes_count; ++m)
 	{
-		for (size_t p = 0; p < data->meshes[m].primitives_count; ++p)
+		for (cgltf_size p = 0; p < data->meshes[m].primitives_count; ++p)
 		{
 			cgltf_primitive* prim = &data->meshes[m].primitives[p];
-			uint32_t vertex_offset = static_cast<uint32_t>(vk.global_vert.size());
 
 			cgltf_accessor* pos_acc = nullptr;
 			cgltf_accessor* joint_acc = nullptr;
@@ -573,8 +576,11 @@ void LoadModel(const char* path, uint32_t model_id, uint32_t tex_id)
 			}
 
 			if (!pos_acc) continue;
-			size_t vertex_count = pos_acc->count;
 
+			Submesh alloc = {};
+			alloc.vertex_offset = static_cast<int32_t>(vk.global_vert.size());
+
+			size_t vertex_count = pos_acc->count;
 			for (size_t v = 0; v < vertex_count; ++v)
 			{
 				Vertex vert = {};
@@ -594,25 +600,43 @@ void LoadModel(const char* path, uint32_t model_id, uint32_t tex_id)
 					vert.uv[0] = u[0];
 					vert.uv[1] = u[1];
 				}
-				vert.model_id = model_id;
-				vert.tex_id = tex_id;
 
 				vk.global_vert.push_back(vert);
 			}
 
-			//indices 
 			if (prim->indices)
 			{
-				for (size_t i = 0; i < prim->indices->count; ++i)
+				alloc.first_index = static_cast<uint32_t>(vk.global_indices.size());
+				alloc.index_count = prim->indices->count;
+				for (size_t i = 0; i < alloc.index_count; ++i)
 				{
 					uint32_t index = (uint32_t)cgltf_accessor_read_index(prim->indices, i);
-					vk.global_indices.push_back(index + vertex_offset);
+					vk.global_indices.push_back(index);
 				}
 			}
+			vk.meshes_alloc.push_back(alloc);
 		}
 	}
-	//animations
+	model.submesh_count = static_cast<uint32_t>(vk.meshes_alloc.size()) - model.submesh_index;
+
 	cgltf_free(data);
+	return model;
+}
+void IndirectCMDs(ModelMeshes model, uint32_t instance_count, uint32_t first_instance)
+{
+	for (uint32_t i = 0; i < model.submesh_count; ++i)
+	{
+		uint32_t index = model.submesh_index + i;
+
+		VkDrawIndexedIndirectCommand cmd{};
+		cmd.indexCount		= vk.meshes_alloc[index].index_count;
+		cmd.instanceCount	= instance_count;
+		cmd.firstIndex		= vk.meshes_alloc[index].first_index;
+		cmd.vertexOffset	= vk.meshes_alloc[index].vertex_offset;
+		cmd.firstInstance	= first_instance;
+
+		vk.indirect_cmds[vk.active_ind_cmds++] = cmd;
+	}
 }
 
 void LoadTextures(Image* image, const char** texture_paths, uint32_t array_layers, VkFormat image_format)
@@ -847,7 +871,7 @@ void CreateVertexBuffer()
 }
 void CreateVertex2DBuffer()
 {
-	VkDeviceSize buffer_size = sizeof(vk.global_vert_2d[0]) * vk.global_vert_2d.size();
+	VkDeviceSize buffer_size = MAX_QUADS;
 
 	CreateBuffer(buffer_size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
 		VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, vk.global_vert_2d_buffer.buffer, vk.global_vert_2d_buffer.mem);
@@ -888,16 +912,25 @@ void CreateGUBOBuffer()
 		VK_CHECK(vkMapMemory(vk.logical_device, vk.global_uniform_buffer[i].mem, 0, buffer_size, 0, &vk.global_uniform_buffer_mapped[i]));
 	}
 }
-void CreateMUBOBuffer()
+void CreateIndirectBuffer()
 {
-	VkDeviceSize buffer_size = sizeof(mat4) * MODEL_NUM;
+	VkDeviceSize buffer_size = sizeof(VkDrawIndexedIndirectCommand) * MAX_INDIRECT_CMDS;
+
+	CreateBuffer(buffer_size, VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+		VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, vk.indirect_buffer.buffer, vk.indirect_buffer.mem);
+
+	VK_CHECK(vkMapMemory(vk.logical_device, vk.indirect_buffer.mem, 0, buffer_size, 0, &vk.indirect_buffer_mapped));
+}
+void CreateInstanceBuffer()
+{
+	VkDeviceSize buffer_size = sizeof(InstanceData) * MAX_INSTANCES;
 
 	for (uint32_t i = 0; i < FIF; i++)
 	{
-		CreateBuffer(buffer_size, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-			vk.model_uniform_buffer[i].buffer, vk.model_uniform_buffer[i].mem);
+		CreateBuffer(buffer_size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+			vk.instance_buffer[i].buffer, vk.instance_buffer[i].mem);
 
-		VK_CHECK(vkMapMemory(vk.logical_device, vk.model_uniform_buffer[i].mem, 0, buffer_size, 0, &vk.model_uniform_buffer_mapped[i]));
+		VK_CHECK(vkMapMemory(vk.logical_device, vk.instance_buffer[i].mem, 0, buffer_size, 0, &vk.instance_buffer_mapped[i]));
 	}
 }
 
@@ -932,23 +965,23 @@ void WriteSets()
 		vkUpdateDescriptorSets(vk.logical_device, 1, &write_gubo, 0, nullptr);
 	}
 
-	//mubo
+	//instance buffer
 	for (uint32_t i = 0; i < FIF; i++)
 	{
-		VkDescriptorBufferInfo mubo_info{};
-		mubo_info.buffer = vk.model_uniform_buffer[i].buffer;
-		mubo_info.offset = 0;
-		mubo_info.range = sizeof(mat4) * MODEL_NUM;
+		VkDescriptorBufferInfo instance_buffer_info{};
+		instance_buffer_info.buffer = vk.instance_buffer[i].buffer;
+		instance_buffer_info.offset = 0;
+		instance_buffer_info.range = sizeof(InstanceData) * 3;
 
-		VkWriteDescriptorSet write_mubo = {};
-		write_mubo.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		write_mubo.dstSet = vk.buffer_set[i];
-		write_mubo.dstBinding = 1;
-		write_mubo.dstArrayElement = 0;
-		write_mubo.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-		write_mubo.descriptorCount = 1;
-		write_mubo.pBufferInfo = &mubo_info;
-		vkUpdateDescriptorSets(vk.logical_device, 1, &write_mubo, 0, nullptr);
+		VkWriteDescriptorSet write_instance_buffer = {};
+		write_instance_buffer.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		write_instance_buffer.dstSet = vk.buffer_set[i];
+		write_instance_buffer.dstBinding = 1;
+		write_instance_buffer.dstArrayElement = 0;
+		write_instance_buffer.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+		write_instance_buffer.descriptorCount = 1;
+		write_instance_buffer.pBufferInfo = &instance_buffer_info;
+		vkUpdateDescriptorSets(vk.logical_device, 1, &write_instance_buffer, 0, nullptr);
 	}
 
 	//vertex grid
@@ -1024,8 +1057,6 @@ void WriteSets()
 
 void CreateQuad(float x, float y, float width, float height, uint32_t id)
 {
-	vk.global_vert_2d.reserve(vk.global_vert_2d.size() + 4);
-
 	vk.global_vert_2d.push_back({ { x,         y          }, { 0.0f, 1.0f }, id});
 	vk.global_vert_2d.push_back({ { x + width, y          }, { 1.0f, 1.0f }, id});
 	vk.global_vert_2d.push_back({ { x + width, y + height }, { 1.0f, 0.0f }, id});
@@ -1078,14 +1109,19 @@ void Render(VkCommandBuffer cmd_buffer, uint32_t image_index)
 		vkCmdBindPipeline(cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vk.pipeline_3d);
 		vkCmdBindIndexBuffer(cmd_buffer, vk.global_index_buffer.buffer, 0, VK_INDEX_TYPE_UINT32);
 		vkCmdBindVertexBuffers(cmd_buffer, 0, 1, &vk.global_vert_buffer.buffer, offsets);
-		vkCmdBindDescriptorSets(cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vk.layout_3d, 0, 1, &vk.buffer_set[current_frame], 0, nullptr);
-		vkCmdBindDescriptorSets(cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vk.layout_3d, 1, 1, &vk.texture_set, 0, nullptr);
-		vkCmdDrawIndexed(cmd_buffer, static_cast<uint32_t>(vk.global_indices.size()), 1, 0, 0, 0);
+		vkCmdBindDescriptorSets(cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vk.layout_3d, 0, 1, &vk.buffer_set[current_frame], 
+			0, nullptr);
+		vkCmdBindDescriptorSets(cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vk.layout_3d, 1, 1, &vk.texture_set, 
+			0, nullptr);
+
+		vkCmdDrawIndexedIndirect(cmd_buffer, vk.indirect_buffer.buffer, 0, vk.active_ind_cmds, sizeof(VkDrawIndexedIndirectCommand));
 
 		vkCmdBindPipeline(cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vk.pipeline_2d);
 		vkCmdBindVertexBuffers(cmd_buffer, 0, 1, &vk.global_vert_2d_buffer.buffer, offsets);
 		vkCmdBindIndexBuffer(cmd_buffer, vk.global_index_buffer_2d.buffer, 0, VK_INDEX_TYPE_UINT32);
-		vkCmdBindDescriptorSets(cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vk.layout_2d, 0, 1, &vk.texture_set, 0, nullptr);
+		vkCmdBindDescriptorSets(cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vk.layout_2d, 0, 1, &vk.texture_set, 
+			0, nullptr);
+
 		vkCmdDrawIndexed(cmd_buffer, vk.global_indices_2d.size(), 1, 0, 0, 0);
 
 		#ifdef DEBUG
@@ -1141,3 +1177,35 @@ void DrawFrame()
 
 	current_frame = (current_frame + 1) % FIF;
 }
+
+void InitModels(const char** model_paths, uint32_t array_size)
+{
+	uint32_t first_instance = 0;
+
+	for (uint32_t i = 0; i < array_size; i++)
+	{
+		ModelMeshes model = load_gltf(model_paths[i]);
+		IndirectCMDs(model, 1, first_instance);
+		first_instance++;
+		vk.total_submesh_count += model.submesh_count;
+		vk.model_meshes.push_back(model);
+	}
+}
+void InitQuads()
+{
+	uint32_t quad_num = MAX_QUADS / 4;
+	vk.global_indices_2d.resize(quad_num * 6);
+	uint32_t vertex_offset = 0;
+	for (size_t i = 0; i < vk.global_indices_2d.size(); i += 6)
+	{
+		vk.global_indices_2d[i + 0] = vertex_offset + 0;
+		vk.global_indices_2d[i + 1] = vertex_offset + 1;
+		vk.global_indices_2d[i + 2] = vertex_offset + 2;
+		vk.global_indices_2d[i + 3] = vertex_offset + 2;
+		vk.global_indices_2d[i + 4] = vertex_offset + 3;
+		vk.global_indices_2d[i + 5] = vertex_offset + 0;
+
+		vertex_offset += 4;
+	}
+}
+

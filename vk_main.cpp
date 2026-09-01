@@ -4,12 +4,13 @@
 
 VkContext vk = {};
 
+
 void InitVulkan(HWND win32_handle)
 {
 	//instance
 	const char* instance_layers[] = { "VK_LAYER_KHRONOS_validation" };
 	const char* instance_extensions[] = { VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
-									VK_KHR_SURFACE_EXTENSION_NAME, VK_KHR_WIN32_SURFACE_EXTENSION_NAME};
+									VK_KHR_SURFACE_EXTENSION_NAME, VK_KHR_WIN32_SURFACE_EXTENSION_NAME };
 
 	VkApplicationInfo app_info = {};
 	app_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
@@ -43,7 +44,7 @@ void InitVulkan(HWND win32_handle)
 	uint32_t						 queue_family_count = 0;
 	VkPhysicalDeviceProperties		 physical_device_prop;
 	VkPhysicalDeviceFeatures		 physical_device_feat;
-	VkQueueFamilyProperties			 *q_fam_prop;
+	VkQueueFamilyProperties* q_fam_prop;
 
 	vkEnumeratePhysicalDevices(vk.instance, &device_count, &vk.physical_device);
 	vkGetPhysicalDeviceProperties(vk.physical_device, &physical_device_prop);
@@ -78,8 +79,12 @@ void InitVulkan(HWND win32_handle)
 	vulkan12_feat.runtimeDescriptorArray = VK_TRUE;
 	vulkan12_feat.storageBuffer8BitAccess = VK_TRUE;
 	vulkan12_feat.uniformAndStorageBuffer8BitAccess = VK_TRUE;
-
 	vulkan12_feat.pNext = &dynamic_rendering_feat;
+
+	VkPhysicalDeviceVulkan11Features features11 = {};
+	features11.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
+	features11.shaderDrawParameters = VK_TRUE;
+	features11.pNext = &vulkan12_feat;
 
 	VkDeviceQueueCreateInfo device_queue_info = {};
 	device_queue_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
@@ -93,7 +98,7 @@ void InitVulkan(HWND win32_handle)
 	device_info.pQueueCreateInfos = &device_queue_info;
 	device_info.queueCreateInfoCount = 1;
 	device_info.pEnabledFeatures = &physical_device_feat;
-	device_info.pNext = &vulkan12_feat;
+	device_info.pNext = &features11;
 	device_info.enabledLayerCount = 0;
 	device_info.ppEnabledLayerNames = nullptr;
 	device_info.enabledExtensionCount = ArrayCount(device_extensions);
@@ -105,8 +110,8 @@ void InitVulkan(HWND win32_handle)
 	//swapchain
 	vkGetPhysicalDeviceSurfaceCapabilitiesKHR(vk.physical_device, surface, &vk.surface_cap);
 
-	uint32_t			format_count = 0;
-	uint32_t			present_mode_count = 0;
+	uint32_t format_count = 0;
+	uint32_t present_mode_count = 0;
 
 	vkGetPhysicalDeviceSurfaceFormatsKHR(vk.physical_device, surface, &format_count, 0);
 	vkGetPhysicalDeviceSurfacePresentModesKHR(vk.physical_device, surface, &present_mode_count, 0);
@@ -202,9 +207,9 @@ void InitVulkan(HWND win32_handle)
 	buffer_bindings[0].pImmutableSamplers = nullptr;
 	buffer_bindings[0].stageFlags = VK_SHADER_STAGE_ALL;
 
-	//mubo
+	//instance buffer
 	buffer_bindings[1].binding = 1;
-	buffer_bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	buffer_bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 	buffer_bindings[1].descriptorCount = 1;
 	buffer_bindings[1].pImmutableSamplers = nullptr;
 	buffer_bindings[1].stageFlags = VK_SHADER_STAGE_ALL;
@@ -231,7 +236,7 @@ void InitVulkan(HWND win32_handle)
 	VK_CHECK(vkCreateDescriptorSetLayout(vk.logical_device, &descriptor_set_layout_info, nullptr, &buffer_layout));
 
 	VkDescriptorSetLayoutBinding texture_bindings[2] = {};
-	
+
 	//single global textures
 	texture_bindings[0].binding = 0;
 	texture_bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -315,52 +320,39 @@ void InitVulkan(HWND win32_handle)
 	VK_CHECK(vkCreateSampler(vk.logical_device, &nearest_info, nullptr, &vk.nearest_sampler));
 
 	//textures/models
-	const char* p1tex_path[] =		{ "resources/textures/Image_0.png" };
-	const char* alphamask_path[] =	{ "resources/textures/am_stone_grey.tga" };
-	const char* hp_path[] =			{ "resources/textures/hp_ui.png" };
-	const char* mana_path[] =		{ "resources/textures/mana_ui.png" };
-	const char* hp_bg_path[] =		{ "resources/textures/hp_bg.png" };
-	const char* chest_path[] =		{ "resources/textures/chest.png" };
+	const char* alphamask_path[] = { "resources/textures/am_stone_grey.tga" };
+	const char* p1tex_path[] = { "resources/textures/Image_0.png" };
+	const char* bark_path[] = { "resources/textures/bark.png" };
+	const char* leaves_path[] = { "resources/textures/leaves.png" };
+	const char* hp_bg_path[] = { "resources/textures/hp_bg.png" };
+	const char* hp_path[] = { "resources/textures/hp_ui.png" };
+	const char* mana_path[] = { "resources/textures/mana_ui.png" };
 	const char* tiles_path[] =
-	{	"resources/textures/stone.png",
+	{ "resources/textures/stone.png",
 		"resources/textures/stone2.png",
 		"resources/textures/dirt.png",
 		"resources/textures/dirt2.png",
-		"resources/textures/grass.png" };
+		"resources/textures/grass.png"
+	};
 
-	LoadTextures(&vk.textures[0], alphamask_path,	1, VK_FORMAT_R8_UNORM);
-	LoadTextures(&vk.textures[1], p1tex_path,		1, VK_FORMAT_R8G8B8A8_SRGB);
-	LoadTextures(&vk.textures[2], p1tex_path,		1, VK_FORMAT_R8G8B8A8_SRGB);
-	LoadTextures(&vk.textures[3], hp_path,			1, VK_FORMAT_R8G8B8A8_SRGB);
-	LoadTextures(&vk.textures[4], mana_path,		1, VK_FORMAT_R8G8B8A8_SRGB);
-	LoadTextures(&vk.textures[5], hp_bg_path,		1, VK_FORMAT_R8G8B8A8_SRGB);
-	LoadTextures(&vk.textures[6], chest_path,		1, VK_FORMAT_R8G8B8A8_SRGB);
-	LoadTextures(&vk.tiles,		  tiles_path,		5, VK_FORMAT_R8G8B8A8_SRGB);
+	LoadTextures(&vk.textures[0], alphamask_path, 1, VK_FORMAT_R8_UNORM);
+	LoadTextures(&vk.textures[1], p1tex_path, 1, VK_FORMAT_R8G8B8A8_SRGB);
+	LoadTextures(&vk.textures[2], bark_path, 1, VK_FORMAT_R8G8B8A8_SRGB);
+	LoadTextures(&vk.textures[3], leaves_path, 1, VK_FORMAT_R8G8B8A8_SRGB);
+	LoadTextures(&vk.textures[4], hp_bg_path, 1, VK_FORMAT_R8G8B8A8_SRGB);
+	LoadTextures(&vk.textures[5], hp_path, 1, VK_FORMAT_R8G8B8A8_SRGB);
+	LoadTextures(&vk.textures[6], mana_path, 1, VK_FORMAT_R8G8B8A8_SRGB);
+	LoadTextures(&vk.tiles, tiles_path, 5, VK_FORMAT_R8G8B8A8_SRGB);
 
-	LoadModel("resources/models/plane.glb",		0,0);
-	LoadModel("resources/models/monk_idle.glb", 1,1);
-	LoadModel("resources/models/monk_idle.glb", 2,2);
-	LoadModel("resources/models/chest.glb",		3,6);
-
-	//2D quads
-	CreateQuad(0.0, 0.0, 0.0, 0.0, 0);
-	CreateQuad(0.0, 0.0, 0.0, 0.0, 0);
-	CreateQuad(0.0, 0.0, 0.0, 0.0, 0);
-
-	uint32_t quad_num = vk.global_vert_2d.size() / 4;
-	vk.global_indices_2d.resize(quad_num * 6);
-	uint32_t vertex_offset = 0;
-	for (size_t i = 0; i < vk.global_indices_2d.size(); i += 6)
+	const char* model_paths[] =
 	{
-		vk.global_indices_2d[i + 0] = vertex_offset + 0;
-		vk.global_indices_2d[i + 1] = vertex_offset + 1;
-		vk.global_indices_2d[i + 2] = vertex_offset + 2;
-		vk.global_indices_2d[i + 3] = vertex_offset + 2;
-		vk.global_indices_2d[i + 4] = vertex_offset + 3;
-		vk.global_indices_2d[i + 5] = vertex_offset + 0;
+		"resources/models/plane.glb",
+		"resources/models/monk_idle.glb",
+		"resources/models/tree0.glb"
+	};
 
-		vertex_offset += 4;
-	}
+	InitModels(&model_paths[0], ArrayCount(model_paths));
+	InitQuads();
 
 	//Buffers
 	CreateFogMap();
@@ -370,16 +362,20 @@ void InitVulkan(HWND win32_handle)
 	CreateIndex2DBuffer();
 	CreateVertex2DBuffer();
 	CreateGUBOBuffer();
-	CreateMUBOBuffer();
+	CreateIndirectBuffer();
+	CreateInstanceBuffer();
+
+	VkDeviceSize upload_size = sizeof(VkDrawIndexedIndirectCommand) * vk.total_submesh_count;
+	memcpy(vk.indirect_buffer_mapped, &vk.indirect_cmds[0], upload_size);
 
 	//descriptor pool and descriptor sets
 	VkDescriptorPoolSize desc_pool_size[3]{};
 	desc_pool_size[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-	desc_pool_size[0].descriptorCount = 2 * FIF;
+	desc_pool_size[0].descriptorCount = 1 * FIF;
 	desc_pool_size[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 	desc_pool_size[1].descriptorCount = TEXTURE_NUM + 1;
 	desc_pool_size[2].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-	desc_pool_size[2].descriptorCount = 2 * FIF;
+	desc_pool_size[2].descriptorCount = 3 * FIF;
 
 	VkDescriptorPoolCreateInfo desc_pool_info{};
 	desc_pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -419,6 +415,10 @@ void InitVulkan(HWND win32_handle)
 	{
 		VK_CHECK(vkCreateSemaphore(vk.logical_device, &semaphoreCreateInfo, nullptr, &vk.render_finished_semaphores[i]));
 	}
+
+	free(q_fam_prop);
+	free(present_modes);
+	free(surface_formats);
 
 	InitMA();
 }

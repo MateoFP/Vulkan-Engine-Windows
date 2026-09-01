@@ -1,4 +1,13 @@
 #version 450
+#extension GL_ARB_shader_draw_parameters : enable
+struct InstanceData
+{
+    mat4 model;
+    uint tex_id;
+    uint _pad0;
+    uint _pad1;
+    uint _pad2;
+};
 
 layout(set = 0, binding = 0) uniform Global_UBO 
 {
@@ -10,32 +19,35 @@ layout(set = 0, binding = 0) uniform Global_UBO
     int is_debug;
     uint frame_num;
 } gubo;
-layout(set = 0, binding = 1) uniform Model_UBO
+
+layout(std430, set = 0, binding = 1) readonly buffer instance_data
 {
-    mat4 model[3];
-} mubo;
+    InstanceData instances[];
+} in_data;
 
-layout(location = 0) in vec3 inPos;
-layout(location = 1) in vec2 inUv;
-layout(location = 2) in uint inModelIndex;
-layout(location = 3) in uint in_tex_id;
+layout(location = 0) in vec3 in_pos;
+layout(location = 1) in vec2 in_uv;
 
-layout(location = 0) out vec3 outWorldPos;
-layout(location = 1) out vec2 outUv;
-layout(location = 2) flat out uint outModelIndex;
+layout(location = 0) out vec3 out_world_pos;
+layout(location = 1) out vec2 out_uv;
+layout(location = 2) flat out uint out_model_id;
 layout(location = 3) flat out uint out_tex_id;
 
-layout(location = 4) out vec2 outPlayerPos;
+layout(location = 4) out vec2 out_player_pos;
 
 void main() 
 {
-    vec4 world_pos = mubo.model[inModelIndex] * vec4(inPos, 1.0);
+    InstanceData instance = in_data.instances[gl_InstanceIndex];
+
+    vec4 world_pos = instance.model * vec4(in_pos, 1.0);
     gl_Position = gubo.projView * world_pos;
-    outModelIndex = inModelIndex;
-    out_tex_id = in_tex_id;
-    outWorldPos = world_pos.xyz;
-    outUv = inUv;
-    
-    outPlayerPos.x = mubo.model[1][3][0];
-    outPlayerPos.y = mubo.model[1][3][1]; 
+    out_model_id = gl_InstanceIndex;
+    out_world_pos = world_pos.xyz;
+    out_uv = in_uv;
+   
+    uint submesh_local_index = gl_DrawIDARB - gl_BaseInstanceARB; 
+    uint final_tex_id = instance.tex_id + submesh_local_index;
+    out_tex_id = final_tex_id;
+
+    out_player_pos = in_data.instances[1].model[3].xy;
 }

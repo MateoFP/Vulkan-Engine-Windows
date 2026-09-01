@@ -47,6 +47,17 @@ LRESULT CALLBACK Win32Callback
 		} break;
 		case WM_KEYDOWN:
 		{
+			if (wParam == 'A')
+			{
+				if (gubo.a_clicked == true)
+				{
+					gubo.a_clicked = false;
+				}
+				else
+				{
+					gubo.a_clicked = true;
+				}
+			}
 			if (wParam == 'S')
 			{
 				p1.moving = false;
@@ -54,13 +65,13 @@ LRESULT CALLBACK Win32Callback
 			if (wParam == 'P')
 			{
 				#ifdef DEBUG
-				if (debuginf.show_imgui)
+				if (debuginfo.show_imgui)
 				{
-					debuginf.show_imgui = false;
+					debuginfo.show_imgui = false;
 				}
 				else
 				{
-					debuginf.show_imgui = true;
+					debuginfo.show_imgui = true;
 				}
 				#endif
 			}
@@ -78,26 +89,25 @@ LRESULT CALLBACK Win32Callback
 			if (!input.collision.hit) break;
 
 			p1.destination = input.collision.point;
-
 			p1.movement.x = p1.destination.x - p1.position.x;
 			p1.movement.y = p1.destination.y - p1.position.y;
-
 			p1.movement = v3_normalize(p1.movement);
-
-			float look_x = p1.movement.x;
-			float look_y = p1.movement.y;
-
 			p1.movement *= p1.speed;
 
-			p1.angle = (atan2f(look_y, look_x)) + 1.570796f;
+			p1.angle = (atan2f(p1.movement.y, p1.movement.x)) +1.5708;
 			p1.moving = true;		
 
+			gubo.time_rb = gubo.time;
 			#ifdef DEBUG
 			if (gubo.is_debug)
 			{
 				UpdateVertexGrid(p1.destination.x, p1.destination.y);
 			}
 			#endif
+		} break;
+		case WM_RBUTTONUP:
+		{
+
 		} break;
 		case WM_MOUSEWHEEL:
 		{

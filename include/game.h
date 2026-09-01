@@ -44,10 +44,11 @@ struct GameInput
 
 	union
 	{
-		ButtonState buttons[1];
+		ButtonState buttons[2];
 		struct
 		{
 			ButtonState spacebar;
+			ButtonState mouse_rb;
 		};
 	};
 };
@@ -70,6 +71,7 @@ extern uint32_t current_frame;
 
 v2 WorldToScreen(v3 world_pos, const mat4 view_proj);
 void UpdateVertexGrid(float x, float y);
+void SetGridDirt();
 void UpdateFogGrid();
 void HpToScreen(v3 pos, mat4 viewproj, float char_height);
 void PrintGrid();

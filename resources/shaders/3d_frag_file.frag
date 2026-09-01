@@ -16,7 +16,9 @@ layout(set = 0, binding = 0) uniform Global_UBO
     mat4 projView;
     vec4 dest;
     int is_debug;
-    uint frame_num;
+    float time;
+    float time_rb;
+	float a_clicked;
 } gubo;
 
 layout(std430, set = 0, binding = 2) readonly buffer vertex_grid
@@ -41,7 +43,6 @@ uint get_FLAG(uint x, uint y, uint FLAG)
     return uint(is_on);
 }
 
-
 uint hash2D(uvec2 p)
 {
     p = p * uvec2(1597334677u, 3812015801u);
@@ -60,13 +61,12 @@ layout(set = 1, binding = 0) uniform sampler2D tex[];
 layout(set = 1, binding = 1) uniform sampler2DArray tile;
 
 layout(location = 0) in vec3 in_world_pos;
-layout(location = 1) in vec2 inUv;
-layout(location = 2) flat in uint inModelIndex;
+layout(location = 1) in vec2 in_uv;
+layout(location = 2) flat in uint in_model_id;
 layout(location = 3) flat in uint in_tex_id;
-
 layout(location = 4) in vec2 in_player_pos;
 
-layout(location = 0) out vec4 outColor;
+layout(location = 0) out vec4 out_color;
 
 float get_fog_value(uint x, uint y) 
 {
@@ -96,13 +96,13 @@ float get_fog_value(uint x, uint y)
 
 void main() 
 {
-    if(inModelIndex > 0)
+    if(in_model_id > 0)
     {
-        outColor = texture(tex[nonuniformEXT(in_tex_id)], inUv);
+        out_color = texture(tex[nonuniformEXT(in_tex_id)], in_uv);
         return;
     }
 
-    vec2 map_uv = vec2(inUv.x, inUv.y);
+    vec2 map_uv = vec2(in_uv.x, in_uv.y);
 
     vec2 tiles_uv = map_uv * (GRID_SIZE-1.0);
     ivec2 tile_pos = ivec2(floor(tiles_uv));
@@ -124,11 +124,11 @@ void main()
 
     if(tile_mask == 0)
     {
-        outColor =  stone_color;
+        out_color =  stone_color;
     }
     else if(tile_mask == 15)
     {
-        outColor =  dirt_color;
+        out_color =  dirt_color;
     }
     else
     {
@@ -138,7 +138,7 @@ void main()
         ivec2 pixel_coord = ivec2(alpha_uv * vec2(atlas_size));
 
         float raw_mask = texelFetch(tex[0], pixel_coord, 0).r;
-        outColor = mix(stone_color, dirt_color, raw_mask); 
+        out_color = mix(stone_color, dirt_color, raw_mask); 
     }
     
     if(gubo.is_debug == 0)
@@ -156,7 +156,7 @@ void main()
         float fog_bottom  = mix(f_bl, f_br, local_fog_uv.x);
         float fog_factor  = mix(fog_bottom, fog_top, local_fog_uv.y);
         vec3 fog_color = vec3(0.0, 0.0, 0.0);
-        outColor.rgb = mix(outColor.rgb, fog_color, fog_factor);
+        out_color.rgb = mix(out_color.rgb, fog_color, fog_factor);
     }
     else
     {
@@ -164,25 +164,32 @@ void main()
         if (local_tile_uv.x < line_thickness || local_tile_uv.x > (1.0 - line_thickness) ||
         local_tile_uv.y < line_thickness || local_tile_uv.y > (1.0 - line_thickness))
         {
-            outColor = vec4(1.1, 0.1, 0.0, 1.1);
+            out_color = vec4(1.0, 0.1, 0.0, 1.0);
         }
     }
 
+    //timed (fix pointer/circle/dest accuracy)
     float distance_to_click = distance(in_world_pos.xy, gubo.dest.xy);
-    float click_r = 0.26;
-    if (distance_to_click < click_r)
+    if(gubo.dest.x != 0)
     {
-        vec3 marker_color = vec3(0.0, 1.5, 2.1); 
-        outColor.rgb = mix(outColor.rgb, marker_color, 0.06);
+        float duration = 0.5;
+        float max_r = 0.4;
+        float age = gubo.time - gubo.time_rb;
+        if(age >= 0.0 && age <= duration)
+        {
+            float progress = age / duration;
+            float r = max_r - progress;
+            float mask = 1.0 - smoothstep(0.0, 0.04, abs(distance_to_click - r));
+            float fade = 0.8 - progress;
+            out_color.rgb = mix(out_color.rgb, vec3(0.0, 1.0, 0.0), mask * fade);
+        }
     }
-    
-    //if(a_click)
-    float distance_to_player = distance(in_world_pos.xy, in_player_pos.xy);
-    float target_radius = 3.7;
 
-    float delta = fwidth(distance_to_player); 
-    float ring_mask = 1.0 - smoothstep(0.0, delta * 1.7, abs(distance_to_player - target_radius));
-
-    outColor.rgb = mix(outColor.rgb, vec3(0.0, 1.5, 2.1), ring_mask * 0.20);
-
+    if(gubo.a_clicked == 1.0)
+    {
+        float distance_to_player = distance(in_world_pos.xy, in_player_pos.xy);
+        float r = 3.7;
+        float mask = 1.0 - smoothstep(0.0, 0.04, abs(distance_to_player - r));
+        out_color.rgb = mix(out_color.rgb, vec3(0.9, 0.9, 1.0), mask * 0.5);
+    }
 }

@@ -22,7 +22,7 @@ struct DebugInfo
 };
 
 extern WinContext win;
-extern DebugInfo debuginf;
+extern DebugInfo debuginfo;
 
 void InitConsole();
 void MessageLoop();
