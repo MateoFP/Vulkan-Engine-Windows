@@ -4,7 +4,6 @@
 
 VkContext vk = {};
 
-
 void InitVulkan(HWND win32_handle)
 {
 	//instance
@@ -40,10 +39,10 @@ void InitVulkan(HWND win32_handle)
 	VK_CHECK(vkCreateWin32SurfaceKHR(vk.instance, &surface_info, NULL, &surface));
 
 	//device
-	uint32_t						 device_count = 1;
-	uint32_t						 queue_family_count = 0;
-	VkPhysicalDeviceProperties		 physical_device_prop;
-	VkPhysicalDeviceFeatures		 physical_device_feat;
+	uint32_t device_count = 1;
+	uint32_t queue_family_count = 0;
+	VkPhysicalDeviceProperties physical_device_prop;
+	VkPhysicalDeviceFeatures physical_device_feat;
 	VkQueueFamilyProperties* q_fam_prop;
 
 	vkEnumeratePhysicalDevices(vk.instance, &device_count, &vk.physical_device);
@@ -200,14 +199,14 @@ void InitVulkan(HWND win32_handle)
 	VkDescriptorSetLayout texture_layout;
 
 	//gubo
-	VkDescriptorSetLayoutBinding buffer_bindings[4]{};
+	VkDescriptorSetLayoutBinding buffer_bindings[5]{};
 	buffer_bindings[0].binding = 0;
 	buffer_bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 	buffer_bindings[0].descriptorCount = 1;
 	buffer_bindings[0].pImmutableSamplers = nullptr;
 	buffer_bindings[0].stageFlags = VK_SHADER_STAGE_ALL;
 
-	//instance buffer
+	//instance buffer3D
 	buffer_bindings[1].binding = 1;
 	buffer_bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 	buffer_bindings[1].descriptorCount = 1;
@@ -228,9 +227,16 @@ void InitVulkan(HWND win32_handle)
 	buffer_bindings[3].pImmutableSamplers = nullptr;
 	buffer_bindings[3].stageFlags = VK_SHADER_STAGE_ALL;
 
+	//instance buffer2D
+	buffer_bindings[4].binding = 4;
+	buffer_bindings[4].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+	buffer_bindings[4].descriptorCount = 1;
+	buffer_bindings[4].pImmutableSamplers = nullptr;
+	buffer_bindings[4].stageFlags = VK_SHADER_STAGE_ALL;
+
 	VkDescriptorSetLayoutCreateInfo descriptor_set_layout_info{};
 	descriptor_set_layout_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-	descriptor_set_layout_info.bindingCount = 4;
+	descriptor_set_layout_info.bindingCount = 5;
 	descriptor_set_layout_info.pBindings = buffer_bindings;
 
 	VK_CHECK(vkCreateDescriptorSetLayout(vk.logical_device, &descriptor_set_layout_info, nullptr, &buffer_layout));
@@ -257,9 +263,9 @@ void InitVulkan(HWND win32_handle)
 	VK_CHECK(vkCreateDescriptorSetLayout(vk.logical_device, &texture_layout_info, nullptr, &texture_layout));
 
 	//graphics pipelines
-	VkDescriptorSetLayout layouts_3d[2] = { buffer_layout, texture_layout };
-	Create3DPipeline(layouts_3d);
-	Create2DPipeline(&texture_layout);
+	VkDescriptorSetLayout layouts[2] = { buffer_layout, texture_layout };
+	Create3DPipeline(layouts);
+	Create2DPipeline(layouts);
 
 	//cmd pool
 	VkCommandPoolCreateInfo cmd_pool_info{};
@@ -320,19 +326,18 @@ void InitVulkan(HWND win32_handle)
 	VK_CHECK(vkCreateSampler(vk.logical_device, &nearest_info, nullptr, &vk.nearest_sampler));
 
 	//textures/models
-	const char* alphamask_path[] = { "resources/textures/am_stone_grey.tga" };
-	const char* p1tex_path[] = { "resources/textures/Image_0.png" };
-	const char* bark_path[] = { "resources/textures/bark.png" };
-	const char* leaves_path[] = { "resources/textures/leaves.png" };
-	const char* hp_bg_path[] = { "resources/textures/hp_bg.png" };
-	const char* hp_path[] = { "resources/textures/hp_ui.png" };
-	const char* mana_path[] = { "resources/textures/mana_ui.png" };
+	const char* alphamask_path[] =	{ "resources/textures/am_stone_grey.tga" };
+	const char* p1tex_path[] =		{ "resources/textures/Image_0.png" };
+	const char* bark_path[] =		{ "resources/textures/bark.png" };
+	const char* leaves_path[] =		{ "resources/textures/leaves.png" };
+	const char* hp_bg_path[] =		{ "resources/textures/hp_bg.png" };
+	const char* hp_path[] =			{ "resources/textures/hp_ui.png" };
+	const char* mana_path[] =		{ "resources/textures/mana_ui.png" };
+	const char* pug_tex_path[] =	{ "resources/textures/puglin_tex.png" };
 	const char* tiles_path[] =
-	{ "resources/textures/stone.png",
-		"resources/textures/stone2.png",
+	{ 
+		"resources/textures/stone.png",
 		"resources/textures/dirt.png",
-		"resources/textures/dirt2.png",
-		"resources/textures/grass.png"
 	};
 
 	LoadTextures(&vk.textures[0], alphamask_path, 1, VK_FORMAT_R8_UNORM);
@@ -342,28 +347,28 @@ void InitVulkan(HWND win32_handle)
 	LoadTextures(&vk.textures[4], hp_bg_path, 1, VK_FORMAT_R8G8B8A8_SRGB);
 	LoadTextures(&vk.textures[5], hp_path, 1, VK_FORMAT_R8G8B8A8_SRGB);
 	LoadTextures(&vk.textures[6], mana_path, 1, VK_FORMAT_R8G8B8A8_SRGB);
-	LoadTextures(&vk.tiles, tiles_path, 5, VK_FORMAT_R8G8B8A8_SRGB);
+	LoadTextures(&vk.textures[7], pug_tex_path, 1, VK_FORMAT_R8G8B8A8_SRGB);
+	LoadTextures(&vk.tiles, tiles_path, 2, VK_FORMAT_R8G8B8A8_SRGB);
 
 	const char* model_paths[] =
 	{
 		"resources/models/plane.glb",
 		"resources/models/monk_idle.glb",
-		"resources/models/tree0.glb"
+		"resources/models/tree0.glb",
+		"resources/models/Puglin.glb",
 	};
 
 	InitModels(&model_paths[0], ArrayCount(model_paths));
-	InitQuads();
 
 	//Buffers
-	CreateFogMap();
-	CreateVertexGrid();
-	CreateIndexBuffer();
-	CreateVertexBuffer();
-	CreateIndex2DBuffer();
-	CreateVertex2DBuffer();
+	CreateFogBuffer();
+	CreateGridBuffer();
 	CreateGUBOBuffer();
 	CreateIndirectBuffer();
-	CreateInstanceBuffer();
+	CreateIndexBuffer3D();
+	CreateVertexBuffer3D();
+	CreateInstanceBuffer3D();
+	CreateInstanceBuffer2D();
 
 	VkDeviceSize upload_size = sizeof(VkDrawIndexedIndirectCommand) * vk.total_submesh_count;
 	memcpy(vk.indirect_buffer_mapped, &vk.indirect_cmds[0], upload_size);
@@ -375,7 +380,7 @@ void InitVulkan(HWND win32_handle)
 	desc_pool_size[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 	desc_pool_size[1].descriptorCount = TEXTURE_NUM + 1;
 	desc_pool_size[2].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-	desc_pool_size[2].descriptorCount = 3 * FIF;
+	desc_pool_size[2].descriptorCount = 4 * FIF;
 
 	VkDescriptorPoolCreateInfo desc_pool_info{};
 	desc_pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;

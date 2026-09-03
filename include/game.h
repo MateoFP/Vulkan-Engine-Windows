@@ -33,7 +33,6 @@ struct RayCollision
 struct GameContext
 {
 	Camera3D cam;
-	mat4 model[MODEL_NUM];
 	BoundingBox world_box;
 };
 struct GameInput
@@ -73,7 +72,6 @@ v2 WorldToScreen(v3 world_pos, const mat4 view_proj);
 void UpdateVertexGrid(float x, float y);
 void SetGridDirt();
 void UpdateFogGrid();
-void HpToScreen(v3 pos, mat4 viewproj, float char_height);
 void PrintGrid();
 v3 RayCast(double x, double y, mat4 view, mat4 projection, float width, float height);
 RayCollision GetRayCollisionBox(Ray ray, BoundingBox box);

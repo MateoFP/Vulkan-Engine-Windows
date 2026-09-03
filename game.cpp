@@ -26,7 +26,7 @@ v2 WorldToScreen(v3 world_pos, mat4 view_proj)
 
 	v2 position_2d;
 	position_2d.x = (ndc_x + 1.0f) * 0.5f * 1920.0;
-	position_2d.y = (1.0f - ndc_y) * 0.5f * 1080.0;
+	position_2d.y = (ndc_y + 1.0f) * 0.5f * 1080.0;
 
 	return position_2d;
 }
@@ -104,14 +104,14 @@ void UpdateFogGrid()
 	int x = 0;
 	int y = 0;
 
-	x = clamp(x, 0, 100);
-	y = clamp(y, 0, 100);
+	x = clamp(x, 1, 100);
+	y = clamp(y, 1, 100);
 
 	for (y = py - radius; y <= py + radius; ++y)
 	{
 		for (x = px - radius; x <= px + radius; ++x)
 		{
-			if (x >= 0 && x < 100 && y >= 0 && y < 100)
+			if (x >= 1 && x < 100 && y >= 1 && y < 100)
 			{
 				v2 player = { px,py };
 				v2 fog_pos = { x,y };
@@ -125,22 +125,7 @@ void UpdateFogGrid()
 
 	memcpy(vk.fog_map_mapped, &vk.fog_map, sizeof(vk.fog_map));
 }
-void HpToScreen(v3 pos, mat4 viewproj, float char_height)
-{
-	pos.z = pos.z + char_height;
 
-	v2 pos_2d = WorldToScreen(pos, viewproj);
-
-	float bar_w = 100.0f;
-	float bar_h = 18.0f;
-
-	float bar_x = pos_2d.x - (bar_w / 2.0f);
-	float bar_y = pos_2d.y - (bar_h / 2.0f);
-
-	CreateQuad(bar_x, bar_y + 20.0f, bar_w, bar_h, 4);
-	CreateQuad(bar_x, bar_y + 20.0f, bar_w, bar_h, 5); //health bar
-	CreateQuad(bar_x, bar_y + 20.0f, bar_w, bar_h, 6); //mana bar
-}
 void PrintGrid() {
 	for (int y = 0; y < GRID_SIZE; ++y) {
 		for (int x = 0; x < GRID_SIZE; ++x)
@@ -311,22 +296,31 @@ void UploadData()
 	gubo.proj.element[1][1] *= -1.0f;
 	gubo.projView = mat4_multiply(gubo.proj, gubo.view);
 	gubo.dest = { p1.destination.x, p1.destination.y, 0,0 };
-	memcpy(vk.global_uniform_buffer_mapped[current_frame], &gubo, sizeof(gubo));
+	memcpy(vk.gubo_mapped[current_frame], &gubo, sizeof(gubo));
 
-	vk.instance_data[0].model_mat = TSA({ 50.0,50.0,0.0 },	1.0, 0.0);
-	vk.instance_data[0].tex_id = 0;
-	vk.instance_data[1].model_mat = TSA(p1.position, 0.5, p1.angle);
-	vk.instance_data[1].tex_id = 1;
-	vk.instance_data[2].model_mat = TSA({ 10.0,10.0,0.0 }, 0.4, 0.0);
-	vk.instance_data[2].tex_id = 2;
+	vk.instance_data3D[0].model_mat = TSA({ 50.0, 50.0, 0.0 }, 1.0, 0.0);
+	vk.instance_data3D[0].tex_id = 0;
+	vk.instance_data3D[1].model_mat = TSA(p1.position, 0.5, p1.angle);
+	vk.instance_data3D[1].tex_id = 1;
+	vk.instance_data3D[2].model_mat = TSA({ 10.0, 17.0, 0.0 }, 1.0, 0.0);
+	vk.instance_data3D[2].tex_id = 3;
+	vk.instance_data3D[3].model_mat = TSA({ 35.0, 10.0, 0.0 }, 1.0, 0.0);
+	vk.instance_data3D[3].tex_id = 7;
+	VkDeviceSize upload3D = sizeof(InstanceData3D) * MODEL_NUM;
+	memcpy(vk.instance_buffer_mapped3D[current_frame], vk.instance_data3D, upload3D);
 
-	VkDeviceSize upload = sizeof(InstanceData) * 3;
-	memcpy(vk.instance_buffer_mapped[current_frame], vk.instance_data, upload);
-
-	vk.global_vert_2d.clear();
-	HpToScreen(p1.position, gubo.projView, 1.556);
-	VkDeviceSize global_vert_2d_buffer_size = sizeof(vk.global_vert_2d[0]) * vk.global_vert_2d.size();
-	memcpy(vk.global_vert_2d_buffer_mapped, vk.global_vert_2d.data(), global_vert_2d_buffer_size);
+	v3 pos_height = { p1.position.x, p1.position.y, p1.position.z + 1.55f};
+	vk.instance_data2D[0].pos = { WorldToScreen(pos_height, gubo.projView) };
+	vk.instance_data2D[0].wh = { 100.0f, 18.0f };
+	vk.instance_data2D[0].tex_id = 4;
+	vk.instance_data2D[1].pos = { WorldToScreen(pos_height, gubo.projView) };
+	vk.instance_data2D[1].wh = { 100.0f, 18.0f };
+	vk.instance_data2D[1].tex_id = 5;
+	vk.instance_data2D[2].pos = { WorldToScreen(pos_height, gubo.projView) };
+	vk.instance_data2D[2].wh = { 100.0f, 18.0f };
+	vk.instance_data2D[2].tex_id = 6;
+	VkDeviceSize upload2D = sizeof(InstanceData2D) * 3;
+	memcpy(vk.instance_buffer_mapped2D[current_frame], vk.instance_data2D, upload2D);
 }
 void UpdateGame(float frame_delta)
 {
@@ -360,3 +354,4 @@ void UpdateGame(float frame_delta)
 	UploadData();
 	DrawFrame();
 }
+
